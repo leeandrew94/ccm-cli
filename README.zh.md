@@ -1,5 +1,9 @@
 # ccm - Claude Code Model Manager
 
+[![npm version](https://img.shields.io/npm/v/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+[![npm downloads](https://img.shields.io/npm/dm/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+[![license](https://img.shields.io/npm/l/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+
 [English](README.md) | [中文](#中文)
 
 ## 中文
@@ -97,6 +101,10 @@ Profile 配置文件 `~/.ccm/profiles.json`（通过 `ccm add` / `ccm edit` 管�
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | 否 | Haiku 映射 |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | 否 | Sonnet 映射 |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | 否 | Opus 映射 |
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=leeandrew94/ccm-cli&type=Date)](https://star-history.com/#leeandrew94/ccm-cli&Date)
 
 ## License
 

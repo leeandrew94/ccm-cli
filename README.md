@@ -1,6 +1,10 @@
 # ccm - Claude Code Model Manager
 
-[English](#english) | [中文](README.zh.md)
+[![npm version](https://img.shields.io/npm/v/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+[![npm downloads](https://img.shields.io/npm/dm/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+[![license](https://img.shields.io/npm/l/@leeandrew94/ccm.svg)](https://www.npmjs.com/package/@leeandrew94/ccm)
+
+Language：[English](#english) | [中文](README.zh.md)
 
 ## English
 
@@ -97,6 +101,10 @@ Profile config file `~/.ccm/profiles.json` (managed via `ccm add` / `ccm edit`):
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | No | Haiku model mapping |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | No | Sonnet model mapping |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | No | Opus model mapping |
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=leeandrew94/ccm-cli&type=Date)](https://star-history.com/#leeandrew94/ccm-cli&Date)
 
 ## License
 

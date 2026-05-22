@@ -1,0 +1,39 @@
+{
+  "name": "@leeandrew94/ccm",
+  "version": "0.1.0",
+  "description": "Claude Code Model Manager - switch between AI models per terminal",
+  "type": "module",
+  "bin": {
+    "ccm": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "model",
+    "manager",
+    "ai",
+    "cli"
+  ],
+  "author": "leeandrew94",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leeandrew94/ccm-cli"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

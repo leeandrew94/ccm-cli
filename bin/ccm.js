@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// src/cli.ts
+import { readFileSync } from "fs";
+import updateNotifier from "update-notifier";
+
 // src/config.ts
 import fs from "fs";
 
@@ -803,7 +807,8 @@ var BASH_COMPLETION = `_ccm_completions() {
 complete -F _ccm_completions ccm`;
 
 // src/cli.ts
-var VERSION = "0.1.0";
+var pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+var VERSION = pkg.version;
 var KNOWN_COMMANDS = /* @__PURE__ */ new Set([
   "_launch",
   "_register",
@@ -877,6 +882,7 @@ function parseArgs(argv) {
   return { command, args };
 }
 async function main() {
+  updateNotifier({ pkg }).notify();
   const rawArgs = process.argv.slice(2);
   if (rawArgs.includes("-v") || rawArgs.includes("--version")) {
     console.log(`ccm ${VERSION}`);

@@ -35,7 +35,7 @@ export function writeSettings(name: string, profile: Record<string, string>): st
   return filePath;
 }
 
-export function cmdLaunch(args: { name: string }): void {
+export function cmdLaunch(args: { name: string; extraArgs?: string[] }): void {
   const profile = getProfile(args.name);
   if (!profile) {
     err(`Profile '${args.name}' not found.`);
@@ -54,7 +54,7 @@ export function cmdLaunch(args: { name: string }): void {
   info(`Launching claude with profile '${args.name}'...`);
   console.log();
 
-  const child = spawn('claude', ['--settings', settingsPath], {
+  const child = spawn('claude', ['--settings', settingsPath, ...(args.extraArgs || [])], {
     stdio: 'inherit',
   });
   child.on('exit', (code) => {

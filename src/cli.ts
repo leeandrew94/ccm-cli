@@ -46,7 +46,7 @@ Shortcuts:
 }
 
 function parseArgs(argv: string[]): { command: string; args: Record<string, any> } {
-  const args: Record<string, any> = { _: [] };
+  const args: Record<string, any> = { _: [], extra: [] };
   let i = 0;
 
   while (i < argv.length) {
@@ -54,7 +54,7 @@ function parseArgs(argv: string[]): { command: string; args: Record<string, any>
     if (arg === '--all') {
       args.all = true;
     } else if (arg.startsWith('-')) {
-      // skip unknown flags
+      args.extra.push(arg);
     } else {
       args._.push(arg);
     }
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
   const firstArg = rawArgs[0];
   if (firstArg && !KNOWN_COMMANDS.has(firstArg) && !firstArg.startsWith('-')) {
     if (profileExists(firstArg)) {
-      cmdLaunch({ name: firstArg });
+      cmdLaunch({ name: firstArg, extraArgs: rawArgs.slice(1) });
       return;
     }
   }
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case '_launch':
-      cmdLaunch({ name: args.name });
+      cmdLaunch({ name: args.name, extraArgs: args.extra || [] });
       break;
     case '_register':
       cmdRegister({ name: args.name, pid: args.pid, tty: args.tty });

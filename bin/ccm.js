@@ -254,7 +254,7 @@ function cmdLaunch(args) {
   writeRun(process.pid, args.name, "");
   info(`Launching claude with profile '${args.name}'...`);
   console.log();
-  const child = spawn("claude", ["--settings", settingsPath], {
+  const child = spawn("claude", ["--settings", settingsPath, ...args.extraArgs || []], {
     stdio: "inherit"
   });
   child.on("exit", (code) => {
@@ -853,13 +853,14 @@ Shortcuts:
 `);
 }
 function parseArgs(argv) {
-  const args = { _: [] };
+  const args = { _: [], extra: [] };
   let i = 0;
   while (i < argv.length) {
     const arg = argv[i];
     if (arg === "--all") {
       args.all = true;
     } else if (arg.startsWith("-")) {
+      args.extra.push(arg);
     } else {
       args._.push(arg);
     }
@@ -895,14 +896,14 @@ async function main() {
   const firstArg = rawArgs[0];
   if (firstArg && !KNOWN_COMMANDS.has(firstArg) && !firstArg.startsWith("-")) {
     if (profileExists(firstArg)) {
-      cmdLaunch({ name: firstArg });
+      cmdLaunch({ name: firstArg, extraArgs: rawArgs.slice(1) });
       return;
     }
   }
   const { command, args } = parseArgs(rawArgs);
   switch (command) {
     case "_launch":
-      cmdLaunch({ name: args.name });
+      cmdLaunch({ name: args.name, extraArgs: args.extra || [] });
       break;
     case "_register":
       cmdRegister({ name: args.name, pid: args.pid, tty: args.tty });

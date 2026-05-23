@@ -1,6 +1,6 @@
 {
   "name": "@leeandrew94/ccm",
-  "version": "0.1.1",
+  "version": "0.1.11",
   "description": "Claude Code Model Manager - switch between AI models per terminal",
   "type": "module",
   "bin": {
@@ -38,5 +38,8 @@
   "devDependencies": {
     "tsup": "^8.0.0",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "update-notifier": "^7.3.1"
   }
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import updateNotifier from 'update-notifier';
 import { profileExists } from './config.js';
 import { cmdLaunch, cmdConfig, cmdRegister } from './commands/launch.js';
 import { cmdAdd, cmdEdit, cmdRm, cmdList } from './commands/profile.js';
@@ -5,7 +7,8 @@ import { cmdPs, cmdKill, cmdCheck } from './commands/runtime.js';
 import { cmdTest, cmdBalance } from './commands/diagnose.js';
 import { cmdCompletions } from './completions.js';
 
-const VERSION = '0.1.0';
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+const VERSION = pkg.version;
 
 const KNOWN_COMMANDS = new Set([
   '_launch', '_register',
@@ -79,6 +82,8 @@ function parseArgs(argv: string[]): { command: string; args: Record<string, any>
 }
 
 async function main(): Promise<void> {
+  updateNotifier({ pkg }).notify();
+
   const rawArgs = process.argv.slice(2);
 
   // Handle --version / -v

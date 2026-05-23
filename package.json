@@ -4,10 +4,13 @@
   "description": "Claude Code Model Manager - switch between AI models per terminal",
   "type": "module",
   "bin": {
-    "ccm": "./bin/cli.js"
+    "ccm": "./bin/ccm.js"
   },
   "files": [
-    "bin"
+    "bin",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.0.0"

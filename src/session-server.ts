@@ -396,8 +396,10 @@ body {
   flex: 1; overflow-y: auto; padding: 24px 16px;
   background: var(--td-bg-card);box-shadow: var(--td-shadow-1);
 }
-.message { margin-bottom: 20px; display: flex; gap: 10px; }
+.message { margin-bottom: 20px; display: flex; gap: 10px; width: 100%; }
 .message.user { flex-direction: row-reverse; justify-content: flex-start; }
+.message.user > div:not(.avatar) { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; }
+.message.user .bubble { max-width: 85%; }
 .message .avatar {
   width: 32px; height: 32px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

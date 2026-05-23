@@ -104,7 +104,7 @@ Profile config file `~/.ccm/profiles.json` (managed via `ccm add` / `ccm edit`):
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=leeandrew94/ccm-cli&type=Date)](https://star-history.com/#leeandrew94/ccm-cli&Date)
+[![Star History Chart](https://api.star-history.com/chart?repos=leeandrew94/ccm-cli&type=date&legend=top-left)](https://www.star-history.com/?type=date&repos=leeandrew94%2Fccm-cli)
 
 ## License
 

@@ -65,6 +65,45 @@ ccm ps
 | `ccm check` | Check if claude is installed |
 | `ccm test [name]` | Test API connection (omit name to test all) |
 | `ccm balance [name]` | Query model balance/credits (omit name to query all) |
+| `ccm sessions` | Browse session history (interactive terminal list) |
+| `ccm sessions --web` | Open session viewer in browser |
+| `ccm sessions --restore [id]` | Restore a deleted session from trash |
+| `ccm sessions --purge` | Permanently empty the trash |
+
+## Session Management
+
+Browse, search, and restore your Claude Code conversation history.
+
+<p align="center">
+  <img src="assets/sessions-web.png" alt="ccm sessions web" width="800" />
+</p>
+
+```bash
+# Interactive terminal list — navigate with arrow keys
+ccm sessions
+
+# Open full conversation viewer in browser
+ccm sessions --web
+
+# Restore the most recently deleted session
+ccm sessions --restore
+
+# Restore a specific session by ID
+ccm sessions --restore <sessionId>
+
+# Permanently delete all trashed sessions
+ccm sessions --purge
+```
+
+**Terminal list controls:**
+| Key | Action |
+|---|---|
+| `↑↓` | Navigate |
+| `Enter` | Open in browser |
+| `d` | Delete session (moves to trash) |
+| `D` | Delete all sessions (moves to trash) |
+| `←→` | Previous/next page |
+| `q` | Quit |
 
 ## Shell Completions
 

@@ -65,6 +65,45 @@ ccm ps
 | `ccm check` | 检查 claude 是否安装 |
 | `ccm test [name]` | 测试 API 连接（不指定则测试全部） |
 | `ccm balance [name]` | 查询模型余额（不指定则查询全部） |
+| `ccm sessions` | 浏览会话历史（终端交互式列表） |
+| `ccm sessions --web` | 在浏览器中打开会话查看器 |
+| `ccm sessions --restore [id]` | 从回收站恢复已删除的会话 |
+| `ccm sessions --purge` | 永久清空回收站 |
+
+## 会话管理
+
+浏览、搜索、恢复你的 Claude Code 对话历史。
+
+<p align="center">
+  <img src="assets/sessions-web.png" alt="ccm sessions web" width="800" />
+</p>
+
+```bash
+# 终端交互式列表 — 方向键导航
+ccm sessions
+
+# 在浏览器中查看完整对话
+ccm sessions --web
+
+# 恢复最近一次删除的会话
+ccm sessions --restore
+
+# 恢复指定会话
+ccm sessions --restore <sessionId>
+
+# 永久清空回收站
+ccm sessions --purge
+```
+
+**终端列表操作：**
+| 按键 | 功能 |
+|---|---|
+| `↑↓` | 上下选择 |
+| `Enter` | 在浏览器中打开 |
+| `d` | 删除会话（移入回收站） |
+| `D` | 清空全部会话（移入回收站） |
+| `←→` | 上一页/下一页 |
+| `q` | 退出 |
 
 ## Shell 补全
 

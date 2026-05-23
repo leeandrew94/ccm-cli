@@ -8,6 +8,7 @@
   },
   "files": [
     "bin",
+    "assets",
     "README.md",
     "README.zh.md",
     "LICENSE"

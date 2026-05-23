@@ -6,6 +6,7 @@ import { cmdAdd, cmdEdit, cmdRm, cmdList } from './commands/profile.js';
 import { cmdPs, cmdKill, cmdCheck } from './commands/runtime.js';
 import { cmdTest, cmdBalance } from './commands/diagnose.js';
 import { cmdCompletions } from './completions.js';
+import { cmdSessions } from './commands/sessions.js';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
 const VERSION = pkg.version;
@@ -15,7 +16,7 @@ const KNOWN_COMMANDS = new Set([
   'add', 'edit', 'rm', 'list', 'ls',
   'ps', 'kill', 'check',
   'test', 'balance', 'bal', 'config',
-  'completions',
+  'completions', 'sessions',
 ]);
 
 function printHelp(): void {
@@ -35,6 +36,10 @@ Commands:
   balance [name]    Query model balance/credits
   config <name>     Show profile environment variables
   completions       Print shell completion script
+  sessions          Browse and manage session history
+  sessions --web    Open session viewer in browser
+  sessions --restore [id] Restore session from trash
+  sessions --purge  Empty the trash permanently
 
 Options:
   -v, --version     Show version
@@ -152,6 +157,16 @@ async function main(): Promise<void> {
     case 'completions':
       cmdCompletions({ shell: args.shell });
       break;
+    case 'sessions': {
+      const restoreIdx = rawArgs.indexOf('--restore');
+      const restoreId = restoreIdx >= 0 ? (rawArgs[restoreIdx + 1] || '') : undefined;
+      await cmdSessions({
+        web: rawArgs.includes('--web'),
+        restore: restoreIdx >= 0 ? restoreId : undefined,
+        purge: rawArgs.includes('--purge'),
+      });
+      break;
+    }
     default:
       console.error(`Unknown command: ${command}`);
       printHelp();

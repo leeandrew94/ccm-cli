@@ -35,14 +35,14 @@ rm -rf ~/.ccm
 ## 快速开始
 
 ```bash
-# 添加 profile（交互式输入 Base URL / Token / Model）
-ccm add mimo
+# 交互式初始化（推荐）
+ccm init
 
 # 启动
 ccm mimo
 
 # 新开终端，换个模型
-ccm add deepseek
+ccm init
 ccm deepseek
 
 # 查看谁在跑
@@ -53,6 +53,7 @@ ccm ps
 
 | 命令 | 说明 |
 |---|---|
+| `ccm init` | 交互式初始化向导 |
 | `ccm <name>` | 加载 profile 并启动 claude |
 | `ccm add <name>` | 新增 profile |
 | `ccm edit <name>` | 修改 profile |

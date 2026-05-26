@@ -443,6 +443,213 @@ function cmdList() {
 `);
 }
 
+// src/commands/init.ts
+import https from "https";
+import http from "http";
+function httpRequest(url, token, timeout = 8e3) {
+  return new Promise((resolve) => {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === "https:" ? https : http;
+    const req = mod.request(url, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      timeout
+    }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        try {
+          resolve({ status: res.statusCode || 0, body: JSON.parse(body) });
+        } catch {
+          resolve({ status: res.statusCode || 0, body });
+        }
+      });
+    });
+    req.on("error", () => resolve({ status: 0, body: {} }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ status: 0, body: {} });
+    });
+    req.end();
+  });
+}
+async function fetchModels(baseUrl, token) {
+  const url = baseUrl.replace(/\/+$/, "");
+  for (const suffix of ["/anthropic", "/v1/chat/completions"]) {
+    if (url.endsWith(suffix)) return [];
+  }
+  const endpoints = [`${url}/models`, `${url}/v1/models`];
+  for (const ep of endpoints) {
+    const result = await httpRequest(ep, token);
+    if (result.status === 200 && result.body) {
+      const data = result.body.data || result.body.models;
+      if (Array.isArray(data)) {
+        return data.map((m) => m.id || m.name).filter(Boolean).sort();
+      }
+    }
+  }
+  return [];
+}
+async function selectModel(models, label) {
+  if (models.length === 0) {
+    return await ask("Model name");
+  }
+  console.log(`
+  \x1B[1m${label}\x1B[0m (\u2191\u2193 navigate, Enter to select):
+`);
+  const PAGE = 12;
+  let offset = 0;
+  let selected = 0;
+  function render() {
+    process.stdout.write("\x1B[?25l");
+    const start = offset;
+    const end = Math.min(offset + PAGE, models.length);
+    for (let i = start; i < end; i++) {
+      process.stdout.write("\x1B[2K");
+      if (i === selected) {
+        console.log(`  \x1B[36m\u276F\x1B[0m \x1B[1m${models[i]}\x1B[0m`);
+      } else {
+        console.log(`    \x1B[90m${models[i]}\x1B[0m`);
+      }
+    }
+    process.stdout.write("\x1B[2K");
+    if (models.length > PAGE) {
+      console.log(`  \x1B[90m${selected + 1}/${models.length} \u2014 \u2191\u2193 scroll, Enter select\x1B[0m`);
+    }
+    const lines = end - start + (models.length > PAGE ? 1 : 0);
+    process.stdout.write(`\x1B[${lines}A`);
+  }
+  return new Promise((resolve) => {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding("utf-8");
+    render();
+    let buf = "";
+    process.stdin.on("data", function onData(key) {
+      if (key === "\x1B[A") {
+        selected = Math.max(0, selected - 1);
+        if (selected < offset) offset = selected;
+        render();
+      } else if (key === "\x1B[B") {
+        selected = Math.min(models.length - 1, selected + 1);
+        if (selected >= offset + PAGE) offset = selected - PAGE + 1;
+        render();
+      } else if (key === "\r" || key === "\n") {
+        const lines = Math.min(PAGE, models.length - offset) + (models.length > PAGE ? 1 : 0);
+        for (let i = 0; i < lines; i++) {
+          process.stdout.write("\x1B[2K\n");
+        }
+        process.stdout.write(`\x1B[${lines}A`);
+        for (let i = 0; i < lines; i++) {
+          process.stdout.write("\x1B[2K\n");
+        }
+        process.stdout.write(`\x1B[${lines}A`);
+        process.stdout.write(`  \x1B[36m\u276F\x1B[0m \x1B[1m${models[selected]}\x1B[0m
+`);
+        process.stdout.write("\x1B[?25h");
+        process.stdin.setRawMode(false);
+        process.stdin.removeListener("data", onData);
+        process.stdin.pause();
+        resolve(models[selected]);
+      } else if (key === "") {
+        process.stdout.write("\x1B[?25h");
+        process.exit(0);
+      }
+    });
+  });
+}
+async function cmdInit() {
+  console.log();
+  console.log("  \x1B[1;36m\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\x1B[0m");
+  console.log("  \x1B[1;36m\u2502\x1B[0m  ccm - Claude Code Model Manager         \x1B[1;36m\u2502\x1B[0m");
+  console.log("  \x1B[1;36m\u2502\x1B[0m  \x1B[90mSet up your model profile\x1B[0m                \x1B[1;36m\u2502\x1B[0m");
+  console.log("  \x1B[1;36m\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\x1B[0m");
+  console.log();
+  if (!whichClaude()) {
+    warn("Claude Code is not installed.");
+    info("Install it first: npm install -g @anthropic-ai/claude-code\n");
+    const proceed = await ask("Continue anyway? [y/N]");
+    if (proceed.toLowerCase() !== "y") return;
+  }
+  const baseUrl = await ask("API Base URL (*)");
+  if (!baseUrl) {
+    err("Base URL is required.");
+    return;
+  }
+  const token = await ask("API Key (*)");
+  if (!token) {
+    err("API Key is required.");
+    return;
+  }
+  console.log();
+  info("Validating connection...");
+  const isAnthropic = baseUrl.toLowerCase().includes("anthropic");
+  let models = [];
+  if (!isAnthropic) {
+    models = await fetchModels(baseUrl, token);
+    if (models.length > 0) {
+      ok(`Found \x1B[1m${models.length}\x1B[0m models`);
+    } else {
+      info("Could not fetch model list (enter manually)");
+    }
+  }
+  let model;
+  if (isAnthropic) {
+    const anthropicModels = [
+      "claude-sonnet-4-20250514",
+      "claude-opus-4-20250514",
+      "claude-haiku-4-20250501"
+    ];
+    model = await selectModel(anthropicModels, "Select a model");
+  } else if (models.length > 0) {
+    model = await selectModel(models, "Select a model");
+  } else {
+    model = await ask("Model name (*)");
+    if (!model) {
+      err("Model name is required.");
+      return;
+    }
+  }
+  console.log();
+  info("Optional: model mappings for Haiku/Sonnet/Opus (Enter to skip)\n");
+  const haiku = await ask("Haiku model");
+  const sonnet = await ask("Sonnet model");
+  const opus = await ask("Opus model");
+  console.log();
+  const name = await ask("Profile name (*)");
+  if (!name) {
+    err("Profile name is required.");
+    return;
+  }
+  if (profileExists(name)) {
+    warn(`Profile '${name}' already exists.`);
+    const overwrite = await ask("Overwrite? [y/N]");
+    if (overwrite.toLowerCase() !== "y") {
+      info("Cancelled.");
+      return;
+    }
+  }
+  const profile = {
+    ANTHROPIC_BASE_URL: baseUrl,
+    ANTHROPIC_AUTH_TOKEN: token,
+    ANTHROPIC_MODEL: model
+  };
+  if (haiku) profile.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
+  if (sonnet) profile.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnet;
+  if (opus) profile.ANTHROPIC_DEFAULT_OPUS_MODEL = opus;
+  addProfile(name, profile);
+  console.log();
+  ok(`Profile '\x1B[1m${name}\x1B[0m' saved!
+`);
+  console.log(`  \x1B[36mccm ${name}\x1B[0m          launch with this profile`);
+  console.log(`  \x1B[36mccm edit ${name}\x1B[0m      edit configuration`);
+  console.log(`  \x1B[36mccm test ${name}\x1B[0m      test connection`);
+  console.log(`  \x1B[36mccm balance ${name}\x1B[0m   check credits`);
+  console.log();
+}
+
 // src/commands/runtime.ts
 function cmdPs() {
   const runs = getAllRuns();
@@ -494,12 +701,12 @@ function cmdCheck() {
 }
 
 // src/commands/diagnose.ts
-import https from "https";
-import http from "http";
-function httpRequest(url, token, method = "GET", timeout = 1e4, headers = {}) {
+import https2 from "https";
+import http2 from "http";
+function httpRequest2(url, token, method = "GET", timeout = 1e4, headers = {}) {
   return new Promise((resolve) => {
     const parsed = new URL(url);
-    const mod = parsed.protocol === "https:" ? https : http;
+    const mod = parsed.protocol === "https:" ? https2 : http2;
     const reqHeaders = {
       "Authorization": `Bearer ${token}`,
       "x-api-key": token,
@@ -536,7 +743,7 @@ function isAnthropicCompat(baseUrl) {
 async function testConnection(baseUrl, token) {
   const url = baseUrl.replace(/\/+$/, "");
   if (isAnthropicCompat(baseUrl)) {
-    const result = await httpRequest(`${url}/v1/messages`, token, "POST", 1e4, {
+    const result = await httpRequest2(`${url}/v1/messages`, token, "POST", 1e4, {
       "anthropic-version": "2023-06-01"
     });
     if (result.status === 200 || result.status === 400) return { ok: true, endpoint: "/v1/messages" };
@@ -544,14 +751,14 @@ async function testConnection(baseUrl, token) {
     return { ok: false, error: result.error || `HTTP ${result.status}` };
   }
   for (const endpoint of ["/v1/models", "/models"]) {
-    const result = await httpRequest(`${url}${endpoint}`, token);
+    const result = await httpRequest2(`${url}${endpoint}`, token);
     if (result.status === 200) return { ok: true, endpoint };
     if (result.status === 401 || result.status === 403) return { ok: false, error: "Authentication failed (invalid token)" };
   }
   try {
     const baseParts = url.split("//");
     const hostUrl = `${baseParts[0]}//${baseParts[1].split("/")[0]}/`;
-    const result = await httpRequest(hostUrl, token);
+    const result = await httpRequest2(hostUrl, token);
     if (result.status > 0) return { ok: true, endpoint: "(host reachable)" };
   } catch {
   }
@@ -568,10 +775,11 @@ async function queryBalance(baseUrl, token) {
     `${url}/dashboard/billing/usage`,
     `${url}/api/user/balance`,
     `${url}/billing/usage`,
-    `${url}/v1/dashboard/billing/usage`
+    `${url}/v1/dashboard/billing/usage`,
+    `${url}/auth/key`
   ];
   for (const ep of endpoints) {
-    const result = await httpRequest(ep, token);
+    const result = await httpRequest2(ep, token);
     if (result.status === 200) return result.body;
   }
   return null;
@@ -635,6 +843,23 @@ function formatBalanceCell(data, statusWidth) {
   if ("total_available" in data) {
     const bal = fmtAmount(data.total_available, currency);
     return [`\x1B[1;32m${bal}\x1B[0m`, "\x1B[32m\u25CF active\x1B[0m"];
+  }
+  if ("data" in data && typeof data.data === "object" && data.data !== null && "usage" in data.data && "limit" in data.data) {
+    const d = data.data;
+    const used = parseFloat(d.usage);
+    const limit = parseFloat(d.limit);
+    const remaining = limit - used;
+    const balanceStr = `\x1B[1;32m${fmtAmount(remaining.toFixed(4))}\x1B[0m`;
+    let statusStr;
+    if (limit > 0) {
+      const ratio = used / limit;
+      const pct = ratio * 100;
+      const barStr = bar(ratio, 12);
+      statusStr = `${barStr} ${pct.toFixed(1)}% used`;
+    } else {
+      statusStr = d.is_free_tier ? "\x1B[32m\u25CF free tier\x1B[0m" : "\x1B[32m\u25CF active\x1B[0m";
+    }
+    return [balanceStr, statusStr];
   }
   if ("data" in data && typeof data.data === "object" && data.data !== null) {
     const d = data.data;
@@ -1126,7 +1351,7 @@ function cleanupOldTrash() {
 
 // src/session-server.ts
 import { exec } from "child_process";
-import http2 from "http";
+import http3 from "http";
 function openBrowser(url) {
   const cmd = process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
   exec(cmd);
@@ -1137,7 +1362,7 @@ function jsonResponse(res, data, status = 200) {
 }
 function startSessionServer(port = 13501) {
   return new Promise((resolve) => {
-    const server = http2.createServer((req, res) => {
+    const server = http3.createServer((req, res) => {
       const url = new URL(req.url || "/", `http://localhost:${port}`);
       if (req.method === "GET" && (url.pathname === "/" || /^\/session\/[0-9a-f-]+$/.test(url.pathname))) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -1903,6 +2128,7 @@ var VERSION = pkg.version;
 var KNOWN_COMMANDS = /* @__PURE__ */ new Set([
   "_launch",
   "_register",
+  "init",
   "add",
   "edit",
   "rm",
@@ -1923,6 +2149,7 @@ function printHelp() {
 Usage: ccm <command> [options]
 
 Commands:
+  init              Interactive setup wizard
   add <name>        Add a new model profile
   edit <name>       Edit an existing profile
   rm <name>         Delete a profile
@@ -2003,6 +2230,9 @@ async function main() {
       break;
     case "_register":
       cmdRegister({ name: args.name, pid: args.pid, tty: args.tty });
+      break;
+    case "init":
+      await cmdInit();
       break;
     case "add":
       await cmdAdd({ name: args.name });

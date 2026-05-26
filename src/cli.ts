@@ -3,6 +3,7 @@ import updateNotifier from 'update-notifier';
 import { profileExists } from './config.js';
 import { cmdLaunch, cmdConfig, cmdRegister } from './commands/launch.js';
 import { cmdAdd, cmdEdit, cmdRm, cmdList } from './commands/profile.js';
+import { cmdInit } from './commands/init.js';
 import { cmdPs, cmdKill, cmdCheck } from './commands/runtime.js';
 import { cmdTest, cmdBalance } from './commands/diagnose.js';
 import { cmdCompletions } from './completions.js';
@@ -13,6 +14,7 @@ const VERSION = pkg.version;
 
 const KNOWN_COMMANDS = new Set([
   '_launch', '_register',
+  'init',
   'add', 'edit', 'rm', 'list', 'ls',
   'ps', 'kill', 'check',
   'test', 'balance', 'bal', 'config',
@@ -24,6 +26,7 @@ function printHelp(): void {
 Usage: ccm <command> [options]
 
 Commands:
+  init              Interactive setup wizard
   add <name>        Add a new model profile
   edit <name>       Edit an existing profile
   rm <name>         Delete a profile
@@ -121,6 +124,9 @@ async function main(): Promise<void> {
       break;
     case '_register':
       cmdRegister({ name: args.name, pid: args.pid, tty: args.tty });
+      break;
+    case 'init':
+      await cmdInit();
       break;
     case 'add':
       await cmdAdd({ name: args.name });

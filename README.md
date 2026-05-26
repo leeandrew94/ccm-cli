@@ -35,14 +35,14 @@ rm -rf ~/.ccm
 ## Quick Start
 
 ```bash
-# Add a profile (interactive prompts for Base URL / Token / Model)
-ccm add mimo
+# Interactive setup wizard (recommended)
+ccm init
 
 # Launch
 ccm mimo
 
 # Open another terminal, switch to a different model
-ccm add deepseek
+ccm init
 ccm deepseek
 
 # See what's running
@@ -53,6 +53,7 @@ ccm ps
 
 | Command | Description |
 |---|---|
+| `ccm init` | Interactive setup wizard |
 | `ccm <name>` | Load profile and launch claude |
 | `ccm add <name>` | Add a new profile |
 | `ccm edit <name>` | Edit an existing profile |

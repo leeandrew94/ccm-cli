@@ -92,6 +92,7 @@ async function queryBalance(baseUrl: string, token: string): Promise<any | null>
     `${url}/api/user/balance`,
     `${url}/billing/usage`,
     `${url}/v1/dashboard/billing/usage`,
+    `${url}/auth/key`,
   ];
 
   for (const ep of endpoints) {
@@ -172,6 +173,27 @@ function formatBalanceCell(data: any, statusWidth: number): [string, string] {
   if ('total_available' in data) {
     const bal = fmtAmount(data.total_available, currency);
     return [`\x1b[1;32m${bal}\x1b[0m`, '\x1b[32m● active\x1b[0m'];
+  }
+
+  // OpenRouter format: { data: { usage, limit } }
+  if ('data' in data && typeof data.data === 'object' && data.data !== null && 'usage' in data.data && 'limit' in data.data) {
+    const d = data.data;
+    const used = parseFloat(d.usage);
+    const limit = parseFloat(d.limit);
+    const remaining = limit - used;
+
+    const balanceStr = `\x1b[1;32m${fmtAmount(remaining.toFixed(4))}\x1b[0m`;
+
+    let statusStr: string;
+    if (limit > 0) {
+      const ratio = used / limit;
+      const pct = ratio * 100;
+      const barStr = bar(ratio, 12);
+      statusStr = `${barStr} ${pct.toFixed(1)}% used`;
+    } else {
+      statusStr = d.is_free_tier ? '\x1b[32m● free tier\x1b[0m' : '\x1b[32m● active\x1b[0m';
+    }
+    return [balanceStr, statusStr];
   }
 
   // Wrapped format

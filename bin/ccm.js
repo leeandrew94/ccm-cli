@@ -981,7 +981,7 @@ function padAnsi2(text, width) {
 }
 
 // src/completions.ts
-var COMMANDS = ["add", "edit", "rm", "list", "ls", "ps", "kill", "check", "test", "balance", "bal", "config", "completions"];
+var COMMANDS = ["init", "add", "edit", "rm", "list", "ls", "ps", "kill", "check", "test", "balance", "bal", "config", "completions", "sessions"];
 function cmdCompletions(args) {
   const shell = args.shell || detectShell();
   if (shell === "zsh") {

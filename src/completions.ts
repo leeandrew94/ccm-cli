@@ -1,6 +1,6 @@
 import { loadProfiles } from './config.js';
 
-const COMMANDS = ['add', 'edit', 'rm', 'list', 'ls', 'ps', 'kill', 'check', 'test', 'balance', 'bal', 'config', 'completions'];
+const COMMANDS = ['init', 'add', 'edit', 'rm', 'list', 'ls', 'ps', 'kill', 'check', 'test', 'balance', 'bal', 'config', 'completions', 'sessions'];
 
 export function cmdCompletions(args: { shell?: string }): void {
   const shell = args.shell || detectShell();

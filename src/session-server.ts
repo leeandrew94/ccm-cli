@@ -197,10 +197,37 @@ function escHtml(s) {
 
 function renderMarkdown(text) {
   if (!text) return '';
-  var h = escHtml(text);
   var BT = String.fromCharCode(96);
-  h = h.replace(new RegExp(BT + BT + BT + '(\\\\w*)\\\\n([\\\\s\\\\S]*?)' + BT + BT + BT, 'g'), function(m, lang, code) { return '<pre><code>' + highlightCode(code) + '</code></pre>'; });
-  h = h.replace(new RegExp(BT + '([^\\\\n]+?)' + BT, 'g'), '<code>$1</code>');
+  var h = text;
+
+  // Placeholder delimiters: Unicode PUA (Private Use Area) codepoints.
+  // Control chars (\\x00, \\x01) would be replaced with � (�) by the
+  // browser's HTML parser, so we use printable PUA chars that survive intact.
+  var PS = '';  // placeholder start
+  var PE = '';  // placeholder end
+
+  // Step 1: Extract fenced code blocks from RAW text (before any HTML escaping)
+  // Apply syntax highlighting to raw code so highlightCode regexes work correctly
+  var codeBlocks = [];
+  h = h.replace(new RegExp(BT + BT + BT + '(\\\\w*)\\\\n([\\\\s\\\\S]*?)' + BT + BT + BT, 'g'), function(m, lang, code) {
+    var idx = codeBlocks.length;
+    codeBlocks.push('<pre><code>' + highlightCode(code) + '</code></pre>');
+    return PS + 'CCM_CB' + idx + PE;
+  });
+
+  // Step 2: Extract inline code from RAW text
+  // escHtml the code content so it displays literally
+  var inlineCodes = [];
+  h = h.replace(new RegExp(BT + '([^\\\\n]+?)' + BT, 'g'), function(m, code) {
+    var idx = inlineCodes.length;
+    inlineCodes.push('<code>' + escHtml(code) + '</code>');
+    return PS + 'CCM_IC' + idx + PE;
+  });
+
+  // Step 3: Now HTML-escape the remaining text (blockquotes, etc.)
+  h = escHtml(h);
+
+  // Step 4: Apply markdown formatting
   h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
@@ -232,16 +259,56 @@ function renderMarkdown(text) {
   h = h.replace(/(<\\/blockquote>)<\\/p>/g, '$1');
   h = h.replace(/<p>(<hr>)/g, '$1');
   h = h.replace(/(<hr>)<\\/p>/g, '$1');
+
+  // Step 5: Restore code blocks and inline code
+  h = h.replace(new RegExp(PS + 'CCM_CB(\\d+)' + PE, 'g'), function(m, idx) { return codeBlocks[parseInt(idx)]; });
+  h = h.replace(new RegExp(PS + 'CCM_IC(\\d+)' + PE, 'g'), function(m, idx) { return inlineCodes[parseInt(idx)]; });
+
   return h;
 }
 
 function highlightCode(code) {
   var h = code;
-  h = h.replace(/(\\/\\/.*$)/gm, '<span class="cm">$1</span>');
-  h = h.replace(/(#.*$)/gm, '<span class="cm">$1</span>');
-  h = h.replace(/("(?:[^"\\\\\\\\]|\\\\\\\\.)*"|'(?:[^'\\\\\\\\]|\\\\\\\\.)*')/g, '<span class="str">$1</span>');
+  var p = [];
+
+  // Same PUA delimiters used in renderMarkdown
+  var PS = '';
+  var PE = '';
+
+  // Protect strings with placeholders (before other regexes, to avoid
+  // keywords / comments inside strings being highlighted)
+  h = h.replace(/("[^"]*"|'[^']*')/g, function(m) {
+    var i = p.length;
+    p.push('<span class="str">' + escHtml(m) + '</span>');
+    return PS + 'HL' + i + PE;
+  });
+
+  // Protect // comments
+  h = h.replace(/(\\/\\/.*$)/gm, function(m) {
+    var i = p.length;
+    p.push('<span class="cm">' + escHtml(m) + '</span>');
+    return PS + 'HL' + i + PE;
+  });
+
+  // Protect # comments
+  h = h.replace(/(#.*$)/gm, function(m) {
+    var i = p.length;
+    p.push('<span class="cm">' + escHtml(m) + '</span>');
+    return PS + 'HL' + i + PE;
+  });
+
+  // HTML-escape remaining literal code characters
+  h = escHtml(h);
+
+  // Keywords (safe: placeholders contain no keywords)
   h = h.replace(/\\b(import|export|from|const|let|var|function|return|if|else|for|while|class|extends|new|async|await|try|catch|throw|switch|case|break|default|typeof|instanceof|void|null|undefined|true|false|def|self|print|raise|with|as|in|not|and|or|is|lambda|yield|assert|del|global|nonlocal|pass|elif|except|finally)\\b/g, '<span class="kw">$1</span>');
+
+  // Numbers
   h = h.replace(/\\b(\\d+\\.?\\d*)\\b/g, '<span class="num">$1</span>');
+
+  // Restore protected fragments
+  h = h.replace(new RegExp(PS + 'HL(\\d+)' + PE, 'g'), function(m, i) { return p[parseInt(i)]; });
+
   return h;
 }
 
@@ -362,6 +429,7 @@ body {
 .main-header h1 {
   font-size: 16px; font-weight: 600; margin-bottom: 10px;
   line-height: 1.5; color: var(--td-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .main-header .meta {
   display: flex; gap: 18px; font-size: 12px;

@@ -4,6 +4,9 @@ import readline from 'node:readline';
 import { whichClaude } from './launch.js';
 import { addProfile, profileExists } from '../config.js';
 import { err, info, ok, warn } from '../output.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { CONFIG_DIR } from '../constants.js';
 import { ask } from '../output.js';
 
 function httpRequest(url: string, token: string, timeout = 8000): Promise<{ status: number; body: any }> {
@@ -27,6 +30,43 @@ function httpRequest(url: string, token: string, timeout = 8000): Promise<{ stat
     req.end();
   });
 }
+
+const MODEL_CACHE_FILE = path.join(CONFIG_DIR, 'model-cache.json');
+
+interface ModelCacheEntry {
+  models: string[];
+  updatedAt: number;
+}
+
+function loadModelCache(): Record<string, ModelCacheEntry> {
+  try {
+    if (fs.existsSync(MODEL_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(MODEL_CACHE_FILE, 'utf-8'));
+    }
+  } catch {}
+  return {};
+}
+
+function saveModelCache(cache: Record<string, ModelCacheEntry>): void {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(MODEL_CACHE_FILE, JSON.stringify(cache, null, 2) + '\n', 'utf-8');
+}
+
+function getCachedModels(endpoint: string): string[] | undefined {
+  return loadModelCache()[endpoint]?.models;
+}
+
+function setCachedModels(endpoint: string, models: string[]): void {
+  const cache = loadModelCache();
+  cache[endpoint] = { models, updatedAt: Date.now() };
+  saveModelCache(cache);
+}
+
+const FALLBACK_MODELS = [
+  'claude-sonnet-4-20250514',
+  'claude-opus-4-20250514',
+  'claude-haiku-4-20250501',
+];
 
 async function fetchModels(baseUrl: string, token: string): Promise<string[]> {
   const url = baseUrl.replace(/\/+$/, '');
@@ -52,6 +92,8 @@ async function selectModel(models: string[], label: string): Promise<string> {
     return await ask('Model name');
   }
 
+  const options = [...models, 'Custom model...'];
+
   console.log(`\n  \x1b[1m${label}\x1b[0m (↑↓ navigate, Enter to select):\n`);
 
   const PAGE = 12;
@@ -61,25 +103,25 @@ async function selectModel(models: string[], label: string): Promise<string> {
   function render() {
     process.stdout.write('\x1b[?25l'); // hide cursor
     const start = offset;
-    const end = Math.min(offset + PAGE, models.length);
+    const end = Math.min(offset + PAGE, options.length);
 
     for (let i = start; i < end; i++) {
       process.stdout.write('\x1b[2K'); // clear line
       if (i === selected) {
-        console.log(`  \x1b[36m❯\x1b[0m \x1b[1m${models[i]}\x1b[0m`);
+        console.log(`  \x1b[36m❯\x1b[0m \x1b[1m${options[i]}\x1b[0m`);
       } else {
-        console.log(`    \x1b[90m${models[i]}\x1b[0m`);
+        console.log(`    \x1b[90m${options[i]}\x1b[0m`);
       }
     }
 
     // pagination info
     process.stdout.write('\x1b[2K');
-    if (models.length > PAGE) {
-      console.log(`  \x1b[90m${selected + 1}/${models.length} — ↑↓ scroll, Enter select\x1b[0m`);
+    if (options.length > PAGE) {
+      console.log(`  \x1b[90m${selected + 1}/${options.length} — ↑↓ scroll, Enter select\x1b[0m`);
     }
 
     // move cursor back up
-    const lines = end - start + (models.length > PAGE ? 1 : 0);
+    const lines = end - start + (options.length > PAGE ? 1 : 0);
     process.stdout.write(`\x1b[${lines}A`);
   }
 
@@ -90,19 +132,18 @@ async function selectModel(models: string[], label: string): Promise<string> {
 
     render();
 
-    let buf = '';
     process.stdin.on('data', function onData(key: string) {
       if (key === '\x1b[A') { // up
         selected = Math.max(0, selected - 1);
         if (selected < offset) offset = selected;
         render();
       } else if (key === '\x1b[B') { // down
-        selected = Math.min(models.length - 1, selected + 1);
+        selected = Math.min(options.length - 1, selected + 1);
         if (selected >= offset + PAGE) offset = selected - PAGE + 1;
         render();
       } else if (key === '\r' || key === '\n') { // enter
         // clear rendered lines
-        const lines = Math.min(PAGE, models.length - offset) + (models.length > PAGE ? 1 : 0);
+        const lines = Math.min(PAGE, options.length - offset) + (options.length > PAGE ? 1 : 0);
         for (let i = 0; i < lines; i++) {
           process.stdout.write('\x1b[2K\n');
         }
@@ -111,12 +152,18 @@ async function selectModel(models: string[], label: string): Promise<string> {
           process.stdout.write('\x1b[2K\n');
         }
         process.stdout.write(`\x1b[${lines}A`);
-        process.stdout.write(`  \x1b[36m❯\x1b[0m \x1b[1m${models[selected]}\x1b[0m\n`);
+        process.stdout.write(`  \x1b[36m❯\x1b[0m \x1b[1m${options[selected]}\x1b[0m\n`);
         process.stdout.write('\x1b[?25h'); // show cursor
         process.stdin.setRawMode!(false);
         process.stdin.removeListener('data', onData);
         process.stdin.pause();
-        resolve(models[selected]);
+
+        const chosen = options[selected];
+        if (chosen === 'Custom model...') {
+          ask('Model name').then(resolve);
+        } else {
+          resolve(chosen);
+        }
       } else if (key === '\x03') { // ctrl-c
         process.stdout.write('\x1b[?25h');
         process.exit(0);
@@ -162,35 +209,26 @@ export async function cmdInit(): Promise<void> {
   console.log();
   info('Validating connection...');
 
-  const isAnthropic = baseUrl.toLowerCase().includes('anthropic');
+  const endpoint = baseUrl.replace(/\/+$/, '');
+  let models = await fetchModels(baseUrl, token);
 
-  // For Anthropic, skip model list fetching (no public endpoint)
-  let models: string[] = [];
-  if (!isAnthropic) {
-    models = await fetchModels(baseUrl, token);
-    if (models.length > 0) {
-      ok(`Found \x1b[1m${models.length}\x1b[0m models`);
+  if (models.length > 0) {
+    ok(`Found \x1b[1m${models.length}\x1b[0m models`);
+    setCachedModels(endpoint, models);
+  } else {
+    info('Could not fetch model list');
+    const cached = getCachedModels(endpoint);
+    if (cached && cached.length > 0) {
+      info(`Loaded \x1b[1m${cached.length}\x1b[0m models from cache`);
+      models = cached;
     } else {
-      info('Could not fetch model list (enter manually)');
+      info('Using built-in model list');
+      models = FALLBACK_MODELS;
     }
   }
 
   // Step 4: Select model
-  let model: string;
-  if (isAnthropic) {
-    // Anthropic built-in models
-    const anthropicModels = [
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-20250514',
-      'claude-haiku-4-20250501',
-    ];
-    model = await selectModel(anthropicModels, 'Select a model');
-  } else if (models.length > 0) {
-    model = await selectModel(models, 'Select a model');
-  } else {
-    model = await ask('Model name (*)');
-    if (!model) { err('Model name is required.'); return; }
-  }
+  const model = await selectModel(models, 'Select a model');
 
   // Step 5: Optional model mappings
   console.log();

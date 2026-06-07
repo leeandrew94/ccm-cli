@@ -446,6 +446,8 @@ function cmdList() {
 // src/commands/init.ts
 import https from "https";
 import http from "http";
+import fs4 from "fs";
+import path4 from "path";
 function httpRequest(url, token, timeout = 8e3) {
   return new Promise((resolve) => {
     const parsed = new URL(url);
@@ -475,6 +477,33 @@ function httpRequest(url, token, timeout = 8e3) {
     req.end();
   });
 }
+var MODEL_CACHE_FILE = path4.join(CONFIG_DIR, "model-cache.json");
+function loadModelCache() {
+  try {
+    if (fs4.existsSync(MODEL_CACHE_FILE)) {
+      return JSON.parse(fs4.readFileSync(MODEL_CACHE_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return {};
+}
+function saveModelCache(cache) {
+  fs4.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs4.writeFileSync(MODEL_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", "utf-8");
+}
+function getCachedModels(endpoint) {
+  return loadModelCache()[endpoint]?.models;
+}
+function setCachedModels(endpoint, models) {
+  const cache = loadModelCache();
+  cache[endpoint] = { models, updatedAt: Date.now() };
+  saveModelCache(cache);
+}
+var FALLBACK_MODELS = [
+  "claude-sonnet-4-20250514",
+  "claude-opus-4-20250514",
+  "claude-haiku-4-20250501"
+];
 async function fetchModels(baseUrl, token) {
   const url = baseUrl.replace(/\/+$/, "");
   for (const suffix of ["/anthropic", "/v1/chat/completions"]) {
@@ -496,6 +525,7 @@ async function selectModel(models, label) {
   if (models.length === 0) {
     return await ask("Model name");
   }
+  const options = [...models, "Custom model..."];
   console.log(`
   \x1B[1m${label}\x1B[0m (\u2191\u2193 navigate, Enter to select):
 `);
@@ -505,20 +535,20 @@ async function selectModel(models, label) {
   function render() {
     process.stdout.write("\x1B[?25l");
     const start = offset;
-    const end = Math.min(offset + PAGE, models.length);
+    const end = Math.min(offset + PAGE, options.length);
     for (let i = start; i < end; i++) {
       process.stdout.write("\x1B[2K");
       if (i === selected) {
-        console.log(`  \x1B[36m\u276F\x1B[0m \x1B[1m${models[i]}\x1B[0m`);
+        console.log(`  \x1B[36m\u276F\x1B[0m \x1B[1m${options[i]}\x1B[0m`);
       } else {
-        console.log(`    \x1B[90m${models[i]}\x1B[0m`);
+        console.log(`    \x1B[90m${options[i]}\x1B[0m`);
       }
     }
     process.stdout.write("\x1B[2K");
-    if (models.length > PAGE) {
-      console.log(`  \x1B[90m${selected + 1}/${models.length} \u2014 \u2191\u2193 scroll, Enter select\x1B[0m`);
+    if (options.length > PAGE) {
+      console.log(`  \x1B[90m${selected + 1}/${options.length} \u2014 \u2191\u2193 scroll, Enter select\x1B[0m`);
     }
-    const lines = end - start + (models.length > PAGE ? 1 : 0);
+    const lines = end - start + (options.length > PAGE ? 1 : 0);
     process.stdout.write(`\x1B[${lines}A`);
   }
   return new Promise((resolve) => {
@@ -526,18 +556,17 @@ async function selectModel(models, label) {
     process.stdin.resume();
     process.stdin.setEncoding("utf-8");
     render();
-    let buf = "";
     process.stdin.on("data", function onData(key) {
       if (key === "\x1B[A") {
         selected = Math.max(0, selected - 1);
         if (selected < offset) offset = selected;
         render();
       } else if (key === "\x1B[B") {
-        selected = Math.min(models.length - 1, selected + 1);
+        selected = Math.min(options.length - 1, selected + 1);
         if (selected >= offset + PAGE) offset = selected - PAGE + 1;
         render();
       } else if (key === "\r" || key === "\n") {
-        const lines = Math.min(PAGE, models.length - offset) + (models.length > PAGE ? 1 : 0);
+        const lines = Math.min(PAGE, options.length - offset) + (options.length > PAGE ? 1 : 0);
         for (let i = 0; i < lines; i++) {
           process.stdout.write("\x1B[2K\n");
         }
@@ -546,13 +575,18 @@ async function selectModel(models, label) {
           process.stdout.write("\x1B[2K\n");
         }
         process.stdout.write(`\x1B[${lines}A`);
-        process.stdout.write(`  \x1B[36m\u276F\x1B[0m \x1B[1m${models[selected]}\x1B[0m
+        process.stdout.write(`  \x1B[36m\u276F\x1B[0m \x1B[1m${options[selected]}\x1B[0m
 `);
         process.stdout.write("\x1B[?25h");
         process.stdin.setRawMode(false);
         process.stdin.removeListener("data", onData);
         process.stdin.pause();
-        resolve(models[selected]);
+        const chosen = options[selected];
+        if (chosen === "Custom model...") {
+          ask("Model name").then(resolve);
+        } else {
+          resolve(chosen);
+        }
       } else if (key === "") {
         process.stdout.write("\x1B[?25h");
         process.exit(0);
@@ -585,33 +619,23 @@ async function cmdInit() {
   }
   console.log();
   info("Validating connection...");
-  const isAnthropic = baseUrl.toLowerCase().includes("anthropic");
-  let models = [];
-  if (!isAnthropic) {
-    models = await fetchModels(baseUrl, token);
-    if (models.length > 0) {
-      ok(`Found \x1B[1m${models.length}\x1B[0m models`);
-    } else {
-      info("Could not fetch model list (enter manually)");
-    }
-  }
-  let model;
-  if (isAnthropic) {
-    const anthropicModels = [
-      "claude-sonnet-4-20250514",
-      "claude-opus-4-20250514",
-      "claude-haiku-4-20250501"
-    ];
-    model = await selectModel(anthropicModels, "Select a model");
-  } else if (models.length > 0) {
-    model = await selectModel(models, "Select a model");
+  const endpoint = baseUrl.replace(/\/+$/, "");
+  let models = await fetchModels(baseUrl, token);
+  if (models.length > 0) {
+    ok(`Found \x1B[1m${models.length}\x1B[0m models`);
+    setCachedModels(endpoint, models);
   } else {
-    model = await ask("Model name (*)");
-    if (!model) {
-      err("Model name is required.");
-      return;
+    info("Could not fetch model list");
+    const cached = getCachedModels(endpoint);
+    if (cached && cached.length > 0) {
+      info(`Loaded \x1B[1m${cached.length}\x1B[0m models from cache`);
+      models = cached;
+    } else {
+      info("Using built-in model list");
+      models = FALLBACK_MODELS;
     }
   }
+  const model = await selectModel(models, "Select a model");
   console.log();
   info("Optional: model mappings for Haiku/Sonnet/Opus (Enter to skip)\n");
   const haiku = await ask("Haiku model");
@@ -1032,17 +1056,17 @@ var BASH_COMPLETION = `_ccm_completions() {
 complete -F _ccm_completions ccm`;
 
 // src/session-data.ts
-import fs4 from "fs";
-import path4 from "path";
+import fs5 from "fs";
+import path5 from "path";
 import os2 from "os";
-var CLAUDE_DIR = path4.join(os2.homedir(), ".claude");
-var HISTORY_FILE = path4.join(CLAUDE_DIR, "history.jsonl");
-var PROJECTS_DIR = path4.join(CLAUDE_DIR, "projects");
-var TRASH_DIR = path4.join(os2.homedir(), ".ccm", "session-trash");
+var CLAUDE_DIR = path5.join(os2.homedir(), ".claude");
+var HISTORY_FILE = path5.join(CLAUDE_DIR, "history.jsonl");
+var PROJECTS_DIR = path5.join(CLAUDE_DIR, "projects");
+var TRASH_DIR = path5.join(os2.homedir(), ".ccm", "session-trash");
 var TRASH_EXPIRE_DAYS = 30;
 function readJsonl(filePath) {
-  if (!fs4.existsSync(filePath)) return [];
-  const lines = fs4.readFileSync(filePath, "utf-8").split("\n").filter(Boolean);
+  if (!fs5.existsSync(filePath)) return [];
+  const lines = fs5.readFileSync(filePath, "utf-8").split("\n").filter(Boolean);
   const results = [];
   for (const line of lines) {
     try {
@@ -1054,8 +1078,8 @@ function readJsonl(filePath) {
 }
 function atomicWriteJsonl(filePath, lines) {
   const tmp = filePath + ".tmp";
-  fs4.writeFileSync(tmp, lines.join("\n"), "utf-8");
-  fs4.renameSync(tmp, filePath);
+  fs5.writeFileSync(tmp, lines.join("\n"), "utf-8");
+  fs5.renameSync(tmp, filePath);
 }
 function getHistoryEntries() {
   const entries = readJsonl(HISTORY_FILE);
@@ -1093,11 +1117,11 @@ function getSessionsList() {
   return sessions;
 }
 function findSessionJsonl(sessionId) {
-  if (!fs4.existsSync(PROJECTS_DIR)) return null;
-  const projectDirs = fs4.readdirSync(PROJECTS_DIR);
+  if (!fs5.existsSync(PROJECTS_DIR)) return null;
+  const projectDirs = fs5.readdirSync(PROJECTS_DIR);
   for (const dir of projectDirs) {
-    const filePath = path4.join(PROJECTS_DIR, dir, `${sessionId}.jsonl`);
-    if (fs4.existsSync(filePath)) return filePath;
+    const filePath = path5.join(PROJECTS_DIR, dir, `${sessionId}.jsonl`);
+    if (fs5.existsSync(filePath)) return filePath;
   }
   return null;
 }
@@ -1166,11 +1190,11 @@ function getSessionTitle(sessionId) {
   return null;
 }
 function ensureTrashDir() {
-  fs4.mkdirSync(TRASH_DIR, { recursive: true });
+  fs5.mkdirSync(TRASH_DIR, { recursive: true });
 }
 function extractHistoryForSession(sessionId) {
-  if (!fs4.existsSync(HISTORY_FILE)) return [];
-  const lines = fs4.readFileSync(HISTORY_FILE, "utf-8").split("\n").filter(Boolean);
+  if (!fs5.existsSync(HISTORY_FILE)) return [];
+  const lines = fs5.readFileSync(HISTORY_FILE, "utf-8").split("\n").filter(Boolean);
   const matched = [];
   for (const line of lines) {
     try {
@@ -1182,8 +1206,8 @@ function extractHistoryForSession(sessionId) {
   return matched;
 }
 function filterHistoryBySession(sessionId) {
-  if (!fs4.existsSync(HISTORY_FILE)) return;
-  const lines = fs4.readFileSync(HISTORY_FILE, "utf-8").split("\n");
+  if (!fs5.existsSync(HISTORY_FILE)) return;
+  const lines = fs5.readFileSync(HISTORY_FILE, "utf-8").split("\n");
   const filtered = lines.filter((line) => {
     if (!line.trim()) return false;
     try {
@@ -1201,15 +1225,15 @@ function deleteSession(sessionId) {
   const filePath = findSessionJsonl(sessionId);
   let originalProject = "";
   if (filePath) {
-    originalProject = path4.basename(path4.dirname(filePath));
-    const destJsonl = path4.join(TRASH_DIR, `${sessionId}.jsonl`);
-    fs4.copyFileSync(filePath, destJsonl);
-    fs4.unlinkSync(filePath);
-    const sessionDir = path4.join(path4.dirname(filePath), sessionId);
-    if (fs4.existsSync(sessionDir)) {
-      const destDir = path4.join(TRASH_DIR, sessionId);
-      fs4.cpSync(sessionDir, destDir, { recursive: true });
-      fs4.rmSync(sessionDir, { recursive: true, force: true });
+    originalProject = path5.basename(path5.dirname(filePath));
+    const destJsonl = path5.join(TRASH_DIR, `${sessionId}.jsonl`);
+    fs5.copyFileSync(filePath, destJsonl);
+    fs5.unlinkSync(filePath);
+    const sessionDir = path5.join(path5.dirname(filePath), sessionId);
+    if (fs5.existsSync(sessionDir)) {
+      const destDir = path5.join(TRASH_DIR, sessionId);
+      fs5.cpSync(sessionDir, destDir, { recursive: true });
+      fs5.rmSync(sessionDir, { recursive: true, force: true });
     }
   }
   const meta = {
@@ -1218,8 +1242,8 @@ function deleteSession(sessionId) {
     originalProject,
     historyEntries
   };
-  fs4.writeFileSync(
-    path4.join(TRASH_DIR, `${sessionId}.meta.json`),
+  fs5.writeFileSync(
+    path5.join(TRASH_DIR, `${sessionId}.meta.json`),
     JSON.stringify(meta, null, 2),
     "utf-8"
   );
@@ -1232,14 +1256,14 @@ function deleteAllSessions() {
     const historyEntries = extractHistoryForSession(session.sessionId);
     const filePath = findSessionJsonl(session.sessionId);
     if (filePath) {
-      const destJsonl = path4.join(TRASH_DIR, `${session.sessionId}.jsonl`);
-      fs4.copyFileSync(filePath, destJsonl);
-      fs4.unlinkSync(filePath);
-      const sessionDir = path4.join(path4.dirname(filePath), session.sessionId);
-      if (fs4.existsSync(sessionDir)) {
-        const destDir = path4.join(TRASH_DIR, session.sessionId);
-        fs4.cpSync(sessionDir, destDir, { recursive: true });
-        fs4.rmSync(sessionDir, { recursive: true, force: true });
+      const destJsonl = path5.join(TRASH_DIR, `${session.sessionId}.jsonl`);
+      fs5.copyFileSync(filePath, destJsonl);
+      fs5.unlinkSync(filePath);
+      const sessionDir = path5.join(path5.dirname(filePath), session.sessionId);
+      if (fs5.existsSync(sessionDir)) {
+        const destDir = path5.join(TRASH_DIR, session.sessionId);
+        fs5.cpSync(sessionDir, destDir, { recursive: true });
+        fs5.rmSync(sessionDir, { recursive: true, force: true });
       }
     }
     const meta = {
@@ -1248,68 +1272,68 @@ function deleteAllSessions() {
       originalProject: session.projectName,
       historyEntries
     };
-    fs4.writeFileSync(
-      path4.join(TRASH_DIR, `${session.sessionId}.meta.json`),
+    fs5.writeFileSync(
+      path5.join(TRASH_DIR, `${session.sessionId}.meta.json`),
       JSON.stringify(meta, null, 2),
       "utf-8"
     );
   }
-  if (fs4.existsSync(HISTORY_FILE)) {
+  if (fs5.existsSync(HISTORY_FILE)) {
     atomicWriteJsonl(HISTORY_FILE, []);
   }
 }
 function restoreSession(sessionId) {
-  const metaPath = path4.join(TRASH_DIR, `${sessionId}.meta.json`);
-  if (!fs4.existsSync(metaPath)) return false;
-  const meta = JSON.parse(fs4.readFileSync(metaPath, "utf-8"));
+  const metaPath = path5.join(TRASH_DIR, `${sessionId}.meta.json`);
+  if (!fs5.existsSync(metaPath)) return false;
+  const meta = JSON.parse(fs5.readFileSync(metaPath, "utf-8"));
   const destDir = findProjectDirForRestore(meta.originalProject);
-  const trashJsonl = path4.join(TRASH_DIR, `${sessionId}.jsonl`);
-  if (fs4.existsSync(trashJsonl) && destDir) {
-    fs4.copyFileSync(trashJsonl, path4.join(destDir, `${sessionId}.jsonl`));
-    fs4.unlinkSync(trashJsonl);
+  const trashJsonl = path5.join(TRASH_DIR, `${sessionId}.jsonl`);
+  if (fs5.existsSync(trashJsonl) && destDir) {
+    fs5.copyFileSync(trashJsonl, path5.join(destDir, `${sessionId}.jsonl`));
+    fs5.unlinkSync(trashJsonl);
   }
-  const trashSessionDir = path4.join(TRASH_DIR, sessionId);
-  if (fs4.existsSync(trashSessionDir) && destDir) {
-    const restoredDir = path4.join(destDir, sessionId);
-    fs4.cpSync(trashSessionDir, restoredDir, { recursive: true });
-    fs4.rmSync(trashSessionDir, { recursive: true, force: true });
+  const trashSessionDir = path5.join(TRASH_DIR, sessionId);
+  if (fs5.existsSync(trashSessionDir) && destDir) {
+    const restoredDir = path5.join(destDir, sessionId);
+    fs5.cpSync(trashSessionDir, restoredDir, { recursive: true });
+    fs5.rmSync(trashSessionDir, { recursive: true, force: true });
   }
   if (meta.historyEntries && meta.historyEntries.length > 0) {
     const newLines = meta.historyEntries.map((e) => JSON.stringify(e));
-    if (fs4.existsSync(HISTORY_FILE)) {
-      const existing = fs4.readFileSync(HISTORY_FILE, "utf-8");
+    if (fs5.existsSync(HISTORY_FILE)) {
+      const existing = fs5.readFileSync(HISTORY_FILE, "utf-8");
       const combined = existing.trimEnd() + "\n" + newLines.join("\n") + "\n";
       atomicWriteJsonl(HISTORY_FILE, combined.split("\n"));
     } else {
       atomicWriteJsonl(HISTORY_FILE, newLines);
     }
   }
-  fs4.unlinkSync(metaPath);
+  fs5.unlinkSync(metaPath);
   return true;
 }
 function findProjectDirForRestore(projectName) {
-  if (!fs4.existsSync(PROJECTS_DIR)) return null;
-  const dirs = fs4.readdirSync(PROJECTS_DIR);
+  if (!fs5.existsSync(PROJECTS_DIR)) return null;
+  const dirs = fs5.readdirSync(PROJECTS_DIR);
   for (const dir of dirs) {
     if (dir.endsWith(projectName) || dir.includes(projectName)) {
-      const fullPath = path4.join(PROJECTS_DIR, dir);
-      if (fs4.statSync(fullPath).isDirectory()) return fullPath;
+      const fullPath = path5.join(PROJECTS_DIR, dir);
+      if (fs5.statSync(fullPath).isDirectory()) return fullPath;
     }
   }
   if (dirs.length > 0) {
-    const first = path4.join(PROJECTS_DIR, dirs[0]);
-    if (fs4.statSync(first).isDirectory()) return first;
+    const first = path5.join(PROJECTS_DIR, dirs[0]);
+    if (fs5.statSync(first).isDirectory()) return first;
   }
   return null;
 }
 function getTrashSessions() {
   ensureTrashDir();
-  const files = fs4.readdirSync(TRASH_DIR);
+  const files = fs5.readdirSync(TRASH_DIR);
   const metas = [];
   for (const file of files) {
     if (file.endsWith(".meta.json")) {
       try {
-        const meta = JSON.parse(fs4.readFileSync(path4.join(TRASH_DIR, file), "utf-8"));
+        const meta = JSON.parse(fs5.readFileSync(path5.join(TRASH_DIR, file), "utf-8"));
         metas.push(meta);
       } catch {
       }
@@ -1320,13 +1344,13 @@ function getTrashSessions() {
 }
 function purgeTrash() {
   ensureTrashDir();
-  const files = fs4.readdirSync(TRASH_DIR);
+  const files = fs5.readdirSync(TRASH_DIR);
   for (const file of files) {
-    const fullPath = path4.join(TRASH_DIR, file);
-    if (fs4.statSync(fullPath).isDirectory()) {
-      fs4.rmSync(fullPath, { recursive: true, force: true });
+    const fullPath = path5.join(TRASH_DIR, file);
+    if (fs5.statSync(fullPath).isDirectory()) {
+      fs5.rmSync(fullPath, { recursive: true, force: true });
     } else {
-      fs4.unlinkSync(fullPath);
+      fs5.unlinkSync(fullPath);
     }
   }
 }
@@ -1337,12 +1361,12 @@ function cleanupOldTrash() {
   let cleaned = 0;
   for (const meta of metas) {
     if (meta.deletedAt < cutoff) {
-      const jsonlPath = path4.join(TRASH_DIR, `${meta.sessionId}.jsonl`);
-      if (fs4.existsSync(jsonlPath)) fs4.unlinkSync(jsonlPath);
-      const sessionDir = path4.join(TRASH_DIR, meta.sessionId);
-      if (fs4.existsSync(sessionDir)) fs4.rmSync(sessionDir, { recursive: true, force: true });
-      const metaPath = path4.join(TRASH_DIR, `${meta.sessionId}.meta.json`);
-      if (fs4.existsSync(metaPath)) fs4.unlinkSync(metaPath);
+      const jsonlPath = path5.join(TRASH_DIR, `${meta.sessionId}.jsonl`);
+      if (fs5.existsSync(jsonlPath)) fs5.unlinkSync(jsonlPath);
+      const sessionDir = path5.join(TRASH_DIR, meta.sessionId);
+      if (fs5.existsSync(sessionDir)) fs5.rmSync(sessionDir, { recursive: true, force: true });
+      const metaPath = path5.join(TRASH_DIR, `${meta.sessionId}.meta.json`);
+      if (fs5.existsSync(metaPath)) fs5.unlinkSync(metaPath);
       cleaned++;
     }
   }
